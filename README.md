@@ -55,7 +55,7 @@ By using parens, you can change priority for operation
 (Add(Add  1  2)(Add  3  4))
 ```
 
-Multiplication and division take precedence over addition and multiplication
+Multiplication and division take precedence over addition and subtraction
 ```
 ❯ cargo run "1 + 2 * 3"
 (Add  1(Mul  2  3))
