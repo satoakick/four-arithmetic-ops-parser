@@ -47,8 +47,14 @@ impl Parser {
                             break;
                         }
                     }
-                    let hoge: String = nums.into_iter().collect();
-                    Some(Token::Number(hoge.parse::<usize>().unwrap()))
+                    Some(
+                        Token::Number(
+                            nums.into_iter()
+                                .collect::<String>()
+                                .parse::<usize>()
+                                .unwrap()
+                            )
+                        )
                 },
                 _   => panic!("unexpected token!!")
             }
