@@ -24,8 +24,8 @@ impl Parser {
         }
     }
 
-    fn pop_front(chars: &mut VecDeque<char>) -> Option<Token> {
-        let mut value = chars.pop_front();
+    fn pop_front(&mut self) -> Option<Token> {
+        let mut value = self.chars.pop_front();
         if value.is_some() {
             match value.unwrap() {
                 '+' => Some(Token::Add),
@@ -34,13 +34,13 @@ impl Parser {
                 '/' => Some(Token::Div),
                 '(' => Some(Token::Lparen),
                 ')' => Some(Token::Rparen),
-                ' ' => Self::pop_front(chars),
+                ' ' => self.pop_front(),
                 '0' ..= '9' => {
                     let mut nums: Vec<char> = vec![];
                     while let Some('0'..='9') = value {
                         nums.push(value.unwrap());
-                        if let Some('0'..='9') = chars.get(0) {
-                            value = chars.pop_front();
+                        if let Some('0'..='9') = self.chars.get(0) {
+                            value = self.chars.pop_front();
                         } else {
                             break;
                         }
@@ -62,7 +62,7 @@ impl Parser {
     }
 
     pub fn scan(&mut self) -> &Option<Token> {
-        self.look = Self::pop_front(&mut self.chars);
+        self.look = self.pop_front();
         &self.look
     }
 
