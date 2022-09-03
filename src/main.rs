@@ -24,40 +24,52 @@ impl Parser {
         }
     }
 
-    fn next(&mut self) -> Option<Token> {
-        let mut value = self.chars.pop_front();
-        if value.is_some() {
-            match value.unwrap() {
-                '+' => Some(Token::Add),
-                '-' => Some(Token::Sub),
-                '*' => Some(Token::Mul),
-                '/' => Some(Token::Div),
-                '(' => Some(Token::Lparen),
-                ')' => Some(Token::Rparen),
-                ' ' => self.next(),
-                '0' ..= '9' => {
-                    let mut nums: Vec<char> = vec![];
-                    while let Some('0'..='9') = value {
-                        nums.push(value.unwrap());
-                        if let Some('0'..='9') = self.chars.get(0) {
-                            value = self.chars.pop_front();
-                        } else {
-                            break;
-                        }
-                    }
-                    Some(
-                        Token::Number(
-                            nums.into_iter()
-                                .collect::<String>()
-                                .parse::<usize>()
-                                .unwrap()
-                            )
-                        )
-                },
-                _   => panic!("unexpected token!!")
+    fn next_without_whitespace(&mut self) -> Option<char> {
+        let mut ret = self.chars.pop_front();
+        if ret.is_none() { return None }
+        while let Some(ch) = ret {
+            if ch.is_whitespace() {
+                ret = self.chars.pop_front();
+                continue;
+            } else {
+                break;
             }
-        } else {
-            None
+        }
+        ret
+    } 
+
+    fn next(&mut self) -> Option<Token> {
+        let mut value = self.next_without_whitespace();
+
+        if value.is_none() { return None }
+
+        match value.unwrap() {
+            '+' => Some(Token::Add),
+            '-' => Some(Token::Sub),
+            '*' => Some(Token::Mul),
+            '/' => Some(Token::Div),
+            '(' => Some(Token::Lparen),
+            ')' => Some(Token::Rparen),
+            '0' ..= '9' => {
+                let mut nums: Vec<char> = vec![];
+                while let Some('0'..='9') = value {
+                    nums.push(value.unwrap());
+                    if let Some('0'..='9') = self.chars.get(0) {
+                        value = self.chars.pop_front();
+                    } else {
+                        break;
+                    }
+                }
+                Some(
+                    Token::Number(
+                        nums.into_iter()
+                            .collect::<String>()
+                            .parse::<usize>()
+                            .unwrap()
+                        )
+                    )
+            },
+            _   => panic!("unexpected token!!")
         }
     }
 
@@ -88,55 +100,66 @@ impl Node {
     }
 
     // <expr> ::= <term> [ ('+'|'-') <term> ]*
-    pub fn expr(parser: &mut Parser) -> Node {
+    pub fn expr(parser: &mut Parser) -> Option<Node> {
         if Self::is_first(parser) { parser.scan(); }
+        if Self::is_finish(parser) { return None }
 
-        let mut left = Self::term(parser);
-        loop {
-            let token = parser.look.as_ref();
-            if Self::is_finish(parser) {
-                break;
-            } else {
+        if let mut left @ Some(_) = Self::term(parser) {
+            loop {
+                let token = parser.look.as_ref();
+                if Self::is_finish(parser) {
+                    break;
+                } else {
+                    let token = token.unwrap();
+                    match token {
+                        Token::Add | Token::Sub => {
+                            let mut node = Self::create_node(token);
+                            parser.scan();
+
+                            let right = Self::term(parser);
+                            if left.is_some() && right.is_some() {
+                                Self::add_children(&mut node, left.unwrap(), right.unwrap());
+                            }
+                            left = Some(node);
+                        },
+                        _ => break,
+                    }
+                }
+            }
+            left
+        } else {
+            None
+        }
+    }
+
+    // <term> ::= <factor> [ ('*'|'/') <factor> ]*
+    pub fn term(parser: &mut Parser) -> Option<Node> {
+        if let mut left @ Some(_) = Self::factor(parser) {
+            loop {
+                let token = parser.look.as_ref();
+                if token.is_none() { break; }
                 let token = token.unwrap();
                 match token {
-                    Token::Add | Token::Sub => {
-                        let mut node = Self::create_node(token);
+                    Token::Mul | Token::Div => {
+                        let mut node = Self::create_node(&token);
                         parser.scan();
-
-                        let right = Self::term(parser);
-                        Self::add_children(&mut node, left, right);
-                        left = node;
+                        let right = Self::factor(parser);
+                        if left.is_some() && right.is_some() {
+                            Self::add_children(&mut node, left.unwrap(), right.unwrap());
+                        }
+                        left = Some(node);
                     },
                     _ => break,
                 }
             }
+            left
+        } else {
+            None
         }
-        left
-    }
-
-    // <term> ::= <factor> [ ('*'|'/') <factor> ]*
-    pub fn term(parser: &mut Parser) -> Node {
-        let mut left = Self::factor(parser);
-        loop {
-            let token = parser.look.as_ref();
-            if token.is_none() { break; }
-            let token = token.unwrap();
-            match token {
-                Token::Mul | Token::Div => {
-                    let mut node = Self::create_node(&token);
-                    parser.scan();
-                    let right = Self::factor(parser);
-                    Self::add_children(&mut node, left, right);
-                    left = node;
-                },
-                _ => break,
-            }
-        }
-        left
     }
 
     // <factor> ::= <number> | '(' <expr> ')'
-    pub fn factor (parser: &mut Parser) -> Node {
+    pub fn factor (parser: &mut Parser) -> Option<Node> {
         if let Some(Token::Lparen) = parser.look {
             parser.scan();
             let node = Self::expr(parser);
@@ -151,7 +174,7 @@ impl Node {
             if let Some(Token::Number(_)) = parser.look {
                 let node = Self::create_node(&parser.look.as_ref().unwrap());
                 parser.scan();
-                node
+                Some(node)
             } else {
                 panic!("should be number");
             }
@@ -244,7 +267,7 @@ mod tests {
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
         println!("{} => {:?}", expression, node);
 
         assert_eq!(
@@ -266,7 +289,7 @@ mod tests {
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
         println!("{} => {:?}", expression, node);
 
         assert_eq!(
@@ -288,7 +311,7 @@ mod tests {
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
         println!("{} => {:?}", expression, node);
 
         assert_eq!(
@@ -310,7 +333,7 @@ mod tests {
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
         println!("{} => {:?}", expression, node);
 
         assert_eq!(
@@ -339,7 +362,7 @@ mod tests {
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
 
         Node::print_ast(&node);
 
@@ -376,7 +399,7 @@ mod tests {
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
 
         Node::print_ast(&node);
         println!("");
@@ -409,12 +432,38 @@ mod tests {
     }
 
     #[test]
+    fn next_without_whitespace_test_1() {
+        let mut parser = Parser::new("   1");
+
+        let node = Node::expr(&mut parser).unwrap();
+        Node::print_ast(&node);
+        
+        assert_eq!(Node { token: Token::Number(1), nodes: vec![], value: Some(1 as f64) }, node);
+    }
+    #[test]
+    fn next_without_whitespace_test_2() {
+        let mut parser = Parser::new("  2  ");
+
+        let node = Node::expr(&mut parser).unwrap();
+        Node::print_ast(&node);
+        
+        assert_eq!(Node { token: Token::Number(2), nodes: vec![], value: Some(2 as f64) }, node);
+    }
+    #[test]
+    fn next_without_whitespace_test_3() {
+        let mut parser = Parser::new("    ");
+
+        let node = Node::expr(&mut parser);
+        assert!(node.is_none());
+    }
+
+    #[test]
     fn skip_whitespace_test() {
-        let expression = " 1 + 2 ";
+        let expression = " 1 + 2  ";
         let value = expression;
         let mut parser = Parser::new(value);
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
 
         Node::print_ast(&node);
 
@@ -435,7 +484,7 @@ mod tests {
     fn nums_test() {
         let mut parser = Parser::new("11");
 
-        let node = Node::expr(&mut parser);
+        let node = Node::expr(&mut parser).unwrap();
 
         Node::print_ast(&node);
     }
@@ -446,6 +495,7 @@ fn main() {
     let expr = args[1..].into_iter().map(|s| s.as_str()).collect::<String>();
 
     let mut parser = Parser::new(&expr);
-    let node = Node::expr(&mut parser);
-    Node::print_ast(&node);
+    if let Some(node) = Node::expr(&mut parser) {
+        Node::print_ast(&node);
+    }
 }
