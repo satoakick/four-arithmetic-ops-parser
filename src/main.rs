@@ -18,11 +18,9 @@ pub struct Parser {
 }
 impl Parser {
     pub fn new(str: &str) -> Self {
-        let mut chars: VecDeque<char> = str.chars().collect();
-        let look = Self::pop_front(&mut chars);
         Self {
-            chars,
-            look,
+            chars: str.chars().collect(),
+            look: None,
         }
     }
 
@@ -79,12 +77,24 @@ struct Node {
 
 impl Node {
 
+    pub fn is_first(parser: &Parser) -> bool {
+        let token = parser.look.as_ref();
+        token.is_none() && !parser.chars.is_empty()
+    }
+
+    pub fn is_finish(parser: &Parser) -> bool {
+        let token = parser.look.as_ref();
+        token.is_none() && parser.chars.is_empty()
+    }
+
     // <expr> ::= <term> [ ('+'|'-') <term> ]*
     pub fn expr(parser: &mut Parser) -> Node {
+        if Self::is_first(parser) { parser.scan(); }
+
         let mut left = Self::term(parser);
         loop {
             let token = parser.look.as_ref();
-            if token.is_none() {
+            if Self::is_finish(parser) {
                 break;
             } else {
                 let token = token.unwrap();
@@ -189,8 +199,8 @@ mod tests {
     fn parser_init_test() {
         assert_eq!(
             Parser {
-                chars: VecDeque::from(['+', '2']),
-                look: Some(Token::Number(1))
+                chars: VecDeque::from(['1', '+', '2']),
+                look: None
             },
             Parser::new("1+2")
         );
@@ -200,8 +210,8 @@ mod tests {
     fn parser_init_test_2() {
         assert_eq!(
             Parser {
-                chars: VecDeque::from(['+', '3']),
-                look: Some(Token::Number(12))
+                chars: VecDeque::from(['1', '2', '+', '3']),
+                look: None
             },
             Parser::new("12+3")
         );
@@ -210,8 +220,7 @@ mod tests {
 
     #[test]
     fn scan_test() {
-        let value = "1+2";
-        let parser = &mut Parser::new(value);
+        let parser = &mut Parser::new("1+2");
         let token_0 = parser.look.clone();
         parser.scan();
         let token_1 = parser.look.clone();
@@ -219,11 +228,14 @@ mod tests {
         let token_2 = parser.look.clone();
         parser.scan();
         let token_3 = parser.look.clone();
+        parser.scan();
+        let token_4 = parser.look.clone();
 
-        assert_eq!(Token::Number(1), token_0.unwrap());
-        assert_eq!(Token::Add, token_1.unwrap());
-        assert_eq!(Token::Number(2), token_2.unwrap());
-        assert_eq!(None , token_3);
+        assert_eq!(token_0, None);
+        assert_eq!(token_1.unwrap(), Token::Number(1));
+        assert_eq!(token_2.unwrap(), Token::Add);
+        assert_eq!(token_3.unwrap(), Token::Number(2));
+        assert_eq!(token_4, None);
     }
 
     #[test]
@@ -421,9 +433,7 @@ mod tests {
 
     #[test]
     fn nums_test() {
-        let expression = "11";
-        let value = expression;
-        let mut parser = Parser::new(value);
+        let mut parser = Parser::new("11");
 
         let node = Node::expr(&mut parser);
 
